@@ -1,0 +1,74 @@
+syntax = "proto3";
+
+package raft;
+
+option go_package = "github.com/varad/distributed-kv/internal/transport/raftpb";
+
+// LogEntry represents a single entry in the Raft log.
+message LogEntry {
+  uint64 term   = 1;
+  uint64 index  = 2;
+  bytes  command = 3; // Serialized KV operation
+}
+
+// AppendEntriesRequest is sent by the leader to replicate log entries
+// and also serves as a heartbeat.
+message AppendEntriesRequest {
+  uint64 term             = 1;  // Leader's term
+  string leader_id        = 2;  // So followers can redirect clients
+  uint64 prev_log_index   = 3;  // Index of log entry immediately preceding new ones
+  uint64 prev_log_term    = 4;  // Term of prevLogIndex entry
+  repeated LogEntry entries = 5; // Log entries to store (empty for heartbeat)
+  uint64 leader_commit    = 6;  // Leader's commitIndex
+}
+
+message AppendEntriesResponse {
+  uint64 term    = 1; // currentTerm, for leader to update itself
+  bool   success = 2; // true if follower contained entry matching prevLogIndex and prevLogTerm
+
+  // Optimization: on conflict, follower sends back the conflicting term
+  // and the first index of that term so leader can skip ahead.
+  uint64 conflict_term  = 3;
+  uint64 conflict_index = 4;
+}
+
+// RequestVoteRequest is sent by candidates to gather votes.
+message RequestVoteRequest {
+  uint64 term           = 1; // Candidate's term
+  string candidate_id   = 2; // Candidate requesting vote
+  uint64 last_log_index = 3; // Index of candidate's last log entry
+  uint64 last_log_term  = 4; // Term of candidate's last log entry
+}
+
+message RequestVoteResponse {
+  uint64 term         = 1; // currentTerm, for candidate to update itself
+  bool   vote_granted = 2; // true means candidate received vote
+}
+
+// InstallSnapshotRequest is sent by the leader to followers that are too
+// far behind to catch up via log replication.
+message InstallSnapshotRequest {
+  uint64 term                = 1; // Leader's term
+  string leader_id           = 2;
+  uint64 last_included_index = 3; // The snapshot replaces all entries up through this index
+  uint64 last_included_term  = 4; // Term of lastIncludedIndex
+  uint64 offset              = 5; // Byte offset where chunk is positioned in snapshot file
+  bytes  data                = 6; // Raw bytes of the snapshot chunk
+  bool   done                = 7; // true if this is the last chunk
+}
+
+message InstallSnapshotResponse {
+  uint64 term = 1; // currentTerm, for leader to update itself
+}
+
+// RaftService defines the RPCs for inter-node communication.
+service RaftService {
+  // AppendEntries is used for log replication and heartbeats.
+  rpc AppendEntries(AppendEntriesRequest) returns (AppendEntriesResponse);
+
+  // RequestVote is used during leader election.
+  rpc RequestVote(RequestVoteRequest) returns (RequestVoteResponse);
+
+  // InstallSnapshot is used to send snapshots to slow followers.
+  rpc InstallSnapshot(InstallSnapshotRequest) returns (InstallSnapshotResponse);
+}

@@ -1,0 +1,63 @@
+services:
+  node1:
+    build: ../../
+    container_name: dkv-node1
+    command:
+      - "--id=node1"
+      - "--grpc-addr=:9001"
+      - "--http-addr=:8001"
+      - "--peers=node2=node2:9002=node2:8002,node3=node3:9003=node3:8003"
+      - "--data-dir=/app/data/node1"
+    ports:
+      - "8001:8001"
+      - "9001:9001"
+    volumes:
+      - node1-data:/app/data/node1
+    networks:
+      - dkv-net
+    restart: unless-stopped
+
+  node2:
+    build: ../../
+    container_name: dkv-node2
+    command:
+      - "--id=node2"
+      - "--grpc-addr=:9002"
+      - "--http-addr=:8002"
+      - "--peers=node1=node1:9001=node1:8001,node3=node3:9003=node3:8003"
+      - "--data-dir=/app/data/node2"
+    ports:
+      - "8002:8002"
+      - "9002:9002"
+    volumes:
+      - node2-data:/app/data/node2
+    networks:
+      - dkv-net
+    restart: unless-stopped
+
+  node3:
+    build: ../../
+    container_name: dkv-node3
+    command:
+      - "--id=node3"
+      - "--grpc-addr=:9003"
+      - "--http-addr=:8003"
+      - "--peers=node1=node1:9001=node1:8001,node2=node2:9002=node2:8002"
+      - "--data-dir=/app/data/node3"
+    ports:
+      - "8003:8003"
+      - "9003:9003"
+    volumes:
+      - node3-data:/app/data/node3
+    networks:
+      - dkv-net
+    restart: unless-stopped
+
+volumes:
+  node1-data:
+  node2-data:
+  node3-data:
+
+networks:
+  dkv-net:
+    driver: bridge

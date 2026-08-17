@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Distributed KV Store</title>
+    <style>
+        :root {
+            --bg-color: #0f1115;
+            --surface-color: #1a1d24;
+            --surface-hover: #222630;
+            --border-color: #2e3340;
+            --text-primary: #e2e8f0;
+            --text-secondary: #94a3b8;
+            --accent-blue: #3b82f6;
+            --accent-blue-hover: #2563eb;
+            --status-leader: #10b981;
+            --status-follower: #f59e0b;
+            --status-candidate: #6366f1;
+            --status-offline: #ef4444;
+            
+            --radius-md: 8px;
+            --radius-lg: 12px;
+            --shadow-sm: 0 1px 2px rgba(0,0,0,0.2);
+            --shadow-md: 0 4px 6px -1px rgba(0,0,0,0.3);
+            
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-primary);
+            line-height: 1.5;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            padding: 2rem;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        header {
+            margin-bottom: 3rem;
+            text-align: center;
+        }
+
+        h1 {
+            font-size: 2rem;
+            font-weight: 600;
+            letter-spacing: -0.02em;
+            margin-bottom: 0.5rem;
+        }
+
+        header p {
+            color: var(--text-secondary);
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            width: 100%;
+        }
+
+        /* Node Grid */
+        .cluster-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 3rem;
+        }
+
+        .node-card {
+            background-color: var(--surface-color);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-lg);
+            padding: 1.5rem;
+            box-shadow: var(--shadow-md);
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .node-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 12px -2px rgba(0,0,0,0.4);
+        }
+
+        .node-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
+        }
+
+        .node-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+        }
+
+        .status-badge {
+            font-size: 0.75rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            padding: 0.25rem 0.6rem;
+            border-radius: 9999px;
+            background-color: rgba(255,255,255,0.1);
+        }
+
+        .status-badge.leader { background-color: rgba(16, 185, 129, 0.15); color: var(--status-leader); }
+        .status-badge.follower { background-color: rgba(245, 158, 11, 0.15); color: var(--status-follower); }
+        .status-badge.candidate { background-color: rgba(99, 102, 241, 0.15); color: var(--status-candidate); }
+        .status-badge.offline { background-color: rgba(239, 68, 68, 0.15); color: var(--status-offline); }
+
+        .stat-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 0.5rem 0;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+            font-size: 0.875rem;
+        }
+
+        .stat-row:last-child {
+            border-bottom: none;
+        }
+
+        .stat-label {
+            color: var(--text-secondary);
+        }
+        
+        .stat-val {
+            font-weight: 500;
+            font-variant-numeric: tabular-nums;
+        }
+
+        /* Operations Panel */
+        .ops-panel {
+            background-color: var(--surface-color);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-lg);
+            padding: 2rem;
+            box-shadow: var(--shadow-md);
+        }
+
+        .ops-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin-bottom: 1.5rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .ops-forms {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+
+        .form-label {
+            font-size: 0.875rem;
+            font-weight: 500;
+            color: var(--text-secondary);
+        }
+
+        input[type="text"] {
+            width: 100%;
+            background-color: var(--bg-color);
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+            padding: 0.6rem 0.75rem;
+            border-radius: var(--radius-md);
+            font-size: 0.875rem;
+            transition: border-color 0.2s ease;
+            outline: none;
+        }
+
+        input[type="text"]:focus {
+            border-color: var(--accent-blue);
+        }
+
+        .input-row {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        button {
+            background-color: var(--accent-blue);
+            color: white;
+            border: none;
+            border-radius: var(--radius-md);
+            padding: 0.6rem 1rem;
+            font-size: 0.875rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background-color 0.2s ease;
+            outline: none;
+        }
+
+        button:hover {
+            background-color: var(--accent-blue-hover);
+        }
+
+        button.btn-danger {
+            background-color: var(--status-offline);
+        }
+        
+        button.btn-danger:hover {
+            background-color: #dc2626;
+        }
+
+        .console-output {
+            margin-top: 1.5rem;
+            background-color: #000;
+            border-radius: var(--radius-md);
+            padding: 1rem;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+            font-size: 0.85rem;
+            color: #10b981;
+            min-height: 80px;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Distributed KV Store</h1>
+            <p>Raft Consensus Visualization</p>
+        </header>
+
+        <div class="cluster-grid" id="cluster">
+            <!-- Nodes will be rendered here by JS -->
+        </div>
+
+        <div class="ops-panel">
+            <h2 class="ops-title">Key-Value Operations</h2>
+            <p style="font-size: 0.85rem; color: var(--text-secondary); margin-top: -1rem; margin-bottom: 1.5rem;">Note: Requests can be sent to any node. Followers will automatically issue HTTP 307 redirects to the Leader.</p>
+            
+            <div class="ops-forms">
+                <div class="form-group">
+                    <label class="form-label">Write Data (PUT)</label>
+                    <input type="text" id="put-key" placeholder="Key (e.g. 'user:1')">
+                    <div class="input-row">
+                        <input type="text" id="put-val" placeholder="Value">
+                        <button onclick="handlePut()">Write</button>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Read Data (GET)</label>
+                    <div class="input-row">
+                        <input type="text" id="get-key" placeholder="Key to read">
+                        <button onclick="handleGet()">Read</button>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Delete Data (DELETE)</label>
+                    <div class="input-row">
+                        <input type="text" id="del-key" placeholder="Key to delete">
+                        <button class="btn-danger" onclick="handleDelete()">Delete</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="console-output" id="console">> Ready...</div>
+        </div>
+    </div>
+
+    <script>
+        const nodes = [
+            { id: 'node1', url: 'http://localhost:8001' },
+            { id: 'node2', url: 'http://localhost:8002' },
+            { id: 'node3', url: 'http://localhost:8003' }
+        ];
+
+        let targetNodeUrl = nodes[0].url; // Default to node 1 for API calls
+
+        function log(msg) {
+            const el = document.getElementById('console');
+            el.textContent = `> ${msg}`;
+        }
+
+        function createNodeCard(nodeId) {
+            return `
+                <div class="node-card" id="card-${nodeId}">
+                    <div class="node-header">
+                        <div class="node-title">${nodeId}</div>
+                        <div class="status-badge offline" id="status-${nodeId}">OFFLINE</div>
+                    </div>
+                    <div class="stat-row">
+                        <span class="stat-label">Term</span>
+                        <span class="stat-val" id="term-${nodeId}">-</span>
+                    </div>
+                    <div class="stat-row">
+                        <span class="stat-label">Commit Index</span>
+                        <span class="stat-val" id="commit-${nodeId}">-</span>
+                    </div>
+                    <div class="stat-row">
+                        <span class="stat-label">Last Applied</span>
+                        <span class="stat-val" id="applied-${nodeId}">-</span>
+                    </div>
+                </div>
+            `;
+        }
+
+        // Initialize UI
+        const clusterDiv = document.getElementById('cluster');
+        nodes.forEach(n => {
+            clusterDiv.innerHTML += createNodeCard(n.id);
+        });
+
+        // Polling function
+        async function fetchStatus(node) {
+            try {
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 800);
+                const res = await fetch(`${node.url}/cluster/status`, { signal: controller.signal });
+                clearTimeout(timeoutId);
+                
+                if (res.ok) {
+                    const data = await res.json();
+                    updateNodeUI(node.id, data);
+                } else {
+                    setNodeOffline(node.id);
+                }
+            } catch (err) {
+                setNodeOffline(node.id);
+            }
+        }
+
+        function updateNodeUI(nodeId, data) {
+            const badge = document.getElementById(`status-${nodeId}`);
+            badge.textContent = data.state;
+            badge.className = `status-badge ${data.state.toLowerCase()}`;
+            
+            document.getElementById(`term-${nodeId}`).textContent = data.term;
+            document.getElementById(`commit-${nodeId}`).textContent = data.commit_index;
+            document.getElementById(`applied-${nodeId}`).textContent = data.last_applied;
+        }
+
+        function setNodeOffline(nodeId) {
+            const badge = document.getElementById(`status-${nodeId}`);
+            badge.textContent = "OFFLINE";
+            badge.className = "status-badge offline";
+            
+            document.getElementById(`term-${nodeId}`).textContent = "-";
+            document.getElementById(`commit-${nodeId}`).textContent = "-";
+            document.getElementById(`applied-${nodeId}`).textContent = "-";
+        }
+
+        // Run poll loop
+        setInterval(() => {
+            nodes.forEach(n => fetchStatus(n));
+        }, 1000);
+
+        // API Helpers (Frontend JS fetch follows 307 redirects automatically)
+        async function handlePut() {
+            const key = document.getElementById('put-key').value.trim();
+            const val = document.getElementById('put-val').value.trim();
+            if (!key) return;
+
+            log(`Writing '${key}' = '${val}'...`);
+            try {
+                const res = await fetch(`${targetNodeUrl}/kv/${key}`, {
+                    method: 'PUT',
+                    body: val
+                });
+                
+                if (res.ok) {
+                    log(`Success! '${key}' stored in cluster.`);
+                } else {
+                    const err = await res.text();
+                    log(`Error: ${res.status} - ${err}`);
+                }
+            } catch (e) {
+                log(`Network error: ${e.message}`);
+            }
+        }
+
+        async function handleGet() {
+            const key = document.getElementById('get-key').value.trim();
+            if (!key) return;
+
+            log(`Reading '${key}'...`);
+            try {
+                const res = await fetch(`${targetNodeUrl}/kv/${key}`);
+                if (res.ok) {
+                    const val = await res.text();
+                    log(`Result: '${key}' = '${val}'`);
+                } else if (res.status === 404) {
+                    log(`Result: '${key}' not found.`);
+                } else {
+                    const err = await res.text();
+                    log(`Error: ${res.status} - ${err}`);
+                }
+            } catch (e) {
+                log(`Network error: ${e.message}`);
+            }
+        }
+
+        async function handleDelete() {
+            const key = document.getElementById('del-key').value.trim();
+            if (!key) return;
+
+            log(`Deleting '${key}'...`);
+            try {
+                const res = await fetch(`${targetNodeUrl}/kv/${key}`, { method: 'DELETE' });
+                if (res.ok) {
+                    log(`Success! '${key}' deleted.`);
+                } else {
+                    const err = await res.text();
+                    log(`Error: ${res.status} - ${err}`);
+                }
+            } catch (e) {
+                log(`Network error: ${e.message}`);
+            }
+        }
+    </script>
+</body>
+</html>
